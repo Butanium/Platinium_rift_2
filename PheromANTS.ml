@@ -1,4 +1,4 @@
-(*todo : add malus to cul de sacs, pathfunding to enemy base *)
+(*todo :  pathfunding to enemy base *)
 
 let playercount, myid, zonecount, linkcount = Scanf.sscanf (input_line stdin) " %d  %d  %d  %d"
 (fun playercount myid zonecount linkcount -> (playercount, myid, zonecount, linkcount));;
@@ -19,7 +19,7 @@ type zone =
     mutable bonus:float;
     mutable bonusRefresh:bool;
     mutable path:int list;
-    mutable malus: int;
+    mutable malus: bool;
     };;
 
 let create_zone id owner pod0 pod1 visible plat =
@@ -34,7 +34,7 @@ incomingPods = 0;
 bonus = 0.;
 bonusRefresh = false;
 path = [];
-malus = 0;
+malus = false;
 };;
 let nullZ = create_zone 0 0 0 0 0 0;;
 let maxDist = ref 0.;;
@@ -47,7 +47,8 @@ zone.pods <- [|pod0;pod1|];
 zone.visible <- visible;
 zone.bonusRefresh <- false;
 zone.bonus <- zone.bonus /. 2.;
-if owner = 1-myid then (if zone.malus>0 then prerr_endline (Printf.sprintf "/!!!!!! %d !!!!!!" zone.id); zone.malus <- 0);;
+if owner = 1-myid then (if zone.malus then prerr_endline (Printf.sprintf "/!!!!!! %d !!!!!!" zone.id);
+    zone.malus <- false);;
 
 let length = 10;;
 let ratio = 2.;;
@@ -69,13 +70,13 @@ let score z_start z_end podsCount=
             if d>1 then z_end.path <- z_start.path@[z_start.id];
             if !maxDist < float_of_int(d) then maxDist := float_of_int(d);
         end;
-    if z_end.pods.(1-myid) > 0 then (add_bonus z_end 1.; z_start.malus <- 0; z_end.malus <- 0);
-    if z_end.malus = 0 then (
+    if z_end.pods.(1-myid) > 0 then (add_bonus z_end 1.; z_start.malus <- false; z_end.malus <- false);
+    if not z_end.malus then (
     (float_of_int(z_end.ker_dist)) /. !maxDist *. 10. +. (if z_end.owner = 1-myid then 10. else (if z_end.owner = -1
         then (if z_end.incomingPods = 0 then 100. else 10.) else 0.)) -. float_of_int(z_end.incomingPods
         + z_end.pods.(myid)) /. float_of_int(podsCount+1) /. !maxDist *. 10. +. z_end.bonus *. 10. +. (if z_end.ker_dist > 0 then 0. else 0. )
     )
-    else float_of_int(-z_end.malus)
+    else float_of_int(-z_end.ker_dist)
 ;;
 
 (* Auto-generated code below aims at helping you parse *)
@@ -134,25 +135,20 @@ while true do
     let rec crossPods l = match l with
         | [] -> ()
         | x :: xs -> begin
-        let isIsolated = ref (x.malus = 0) and maxMalus = ref (-1) in
+        let isIsolated = ref (not x.malus) in
         for i = 1 to x.pods.(myid) do
             let podCount = ref (x.pods.(myid) + abs(x.incomingPods)) in
             List.iter (fun x -> podCount += (x.pods.(myid) + abs(x.incomingPods))) !zoneLinkR.(x.id);
             let y :: ys = !zoneLinkR.(x.id) in let enemies = ref y.pods.(1-myid)
             and new_id = ref y.id
             and bestScore = ref (score x y !podCount) in
-            if !isIsolated && y.ker_dist > x.ker_dist &&  y.malus = 0 then isIsolated := false else (
-                if y.malus > 0 then maxMalus := max y.malus !maxMalus
-            );
+            if !isIsolated && y.ker_dist > x.ker_dist &&  not y.malus then isIsolated := false;
             let rec crossZ t = match t with
             | [] -> ()
             | z :: zs -> let sc = (score x z !podCount) in (
-                    if sc > !bestScore then (bestScore:=sc; new_id:=z.id); enemies += z.pods.(1-myid);
-
-                    if !isIsolated && z.ker_dist > x.ker_dist &&  z.malus = 0 then isIsolated := false else (
-                        (* prerr_endline (Printf.sprintf "id : %d, dist : %d, malus : %d" z.id z.ker_dist z.malus); *)
-                        if y.malus > 0 then maxMalus := max y.malus !maxMalus
-                    ););
+                        if sc > !bestScore then (bestScore:=sc; new_id:=z.id); enemies += z.pods.(1-myid);
+                        if !isIsolated && z.ker_dist > x.ker_dist && not z.malus then isIsolated := false
+                    );
                     crossZ zs in
             crossZ ys;
             (* prerr_endline (Printf.sprintf "id : %d, dif : %d" x.id (!enemies - (x.incomingPods + x.pods.(myid)))); *)
@@ -167,13 +163,8 @@ while true do
             )
 
         done;
-        if !isIsolated then (
-            prerr_endline (Printf.sprintf "old malus : %d" x.malus);
-            x.malus <- if !maxMalus != -1 then !maxMalus-1 else int_of_float(!maxDist *. 2.);
-            prerr_endline (Printf.sprintf "id : %d, malus :%d, dist : %d" x.id x.malus x.ker_dist);
-            List.iter (fun x-> prerr_endline (Printf.sprintf "id : %d, dist : %d" x.id x.ker_dist)) !zoneLinkR.(x.id);
-            prerr_endline ""
-        );
+        if !isIsolated then x.malus <- true;
+
 
         crossPods xs; end in crossPods !podList;
     (* Write an action using print_endline *)
